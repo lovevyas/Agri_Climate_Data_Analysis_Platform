@@ -73,9 +73,3 @@ streamlit run visualizations/app.py
 This opens the dashboard in your web browser. You can view crop yields, reporting gaps, pest warnings, and global NOAA environmental observations dynamically!
 
 ---
-
-## 💡 Developer Mindset Docs
-See [documentation/WORKFLOW.md](documentation/WORKFLOW.md) for the full workflow guide, consolidating what used to be a separate `README.md` per directory, explaining:
-- **Why** the code was written that way.
-- **The flow of data** through each script.
-- **Senior developer insights** regarding database indexing, column collisions, window functions, and serverless architectures.
