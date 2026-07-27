@@ -198,8 +198,8 @@ aws/glue/glue_modules.zip
 # Stray output from running the pipeline with infra/ as the working directory
 infra/datasets/
 
-# Machine-local Claude Code settings
-.claude/settings.local.json
+# Local editor/tooling config
+.claude/
 
 # OS
 .DS_Store
