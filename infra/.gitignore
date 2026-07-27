@@ -1,0 +1,8 @@
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+glue-args.json
+
+# Note: .terraform.lock.hcl is intentionally NOT ignored — it should be
+# committed so everyone gets the same provider versions.

@@ -1,0 +1,10 @@
+TC ID,Scenario,Expected Result,Actual Result,Status
+TC-01,Exact duplicate row in raw files,Duplicates removed; primary keys are unique,"Farms Dupes: 0, Stations Dupes: 0",PASSED
+TC-02,Farms in Belagavi/Kota fallback match,Resolved via same-state closest date; match_type = 'Nearest In State',"Farms verified: 261, Match Types: ['Nearest In State']",PASSED
+TC-03,Farm in a state with zero stations,Retained with null matched_station_code and match_type = 'Unresolved',Unmatched yields in current dataset: 0,PASSED
+TC-05,Agriculture vs IMD season vocabulary,"Vocabularies kept distinct, no overlap","Crop Seasons: {'Zaid', 'Kharif', 'Rabi'}, IMD Seasons: {'Summer', 'Winter', 'Monsoon', 'Post-Monsoon'}",PASSED
+TC-06,NOAA station_id instability,Treat station_id as observation attribute; do not assume physical stability,Unstable station counts: 50 out of 50,PASSED
+TC-07,Profit/Loss positive row count,92 profitable farms preserved in aggregates,Profitable farms: 92,PASSED
+TC-08,soil_ph value range check,All values within 0-14 scale,Invalid ph rows: 0,PASSED
+TC-10,Rainfall reporting gap > 20%,Correctly tracked for Use Case 1 KPI threshold,Farms with > 20% gap: 1683 (out of 1740),PASSED
+TC-13,Ingestion to curation row count checks,"2000 rows in, 2000 rows out for all files","Farms: 2000, Yield Facts: 2000, NOAA: 2000",PASSED
