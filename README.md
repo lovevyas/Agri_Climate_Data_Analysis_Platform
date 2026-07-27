@@ -1,5 +1,7 @@
 ﻿# Agri-Climate Risk & Global Environmental Analytics Platform
 
+**[Live dashboard →](https://agriclimate.streamlit.app/)**
+
 An end-to-end data platform that joins Indian farm crop-yield records to official
 IMD weather-station readings and global NOAA climate observations, then serves the
 result through a Streamlit dashboard.
@@ -144,6 +146,11 @@ streamlit run visualizations/app.py
 
 The dashboard defaults to reading local Parquet, so it works with no AWS account.
 Its sidebar can also connect to a live RDS instance if you have one running.
+
+The [hosted copy](https://agriclimate.streamlit.app/) runs this same code on
+Streamlit Community Cloud, reading the committed Parquet files. Its RDS option is
+left unused there — connecting would mean typing a database password into a public
+page, and the AWS side of the project is demonstrated by `infra/` instead.
 
 ---
 
