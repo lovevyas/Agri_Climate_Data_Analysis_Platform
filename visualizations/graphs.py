@@ -27,7 +27,9 @@ def plot_rainfall_gap(gap_summary):
         data=gap_summary,
         x="state",
         y="rainfall_gap_mm",
+        hue="state",
         palette="coolwarm",
+        legend=False,
         ax=ax
     )
     ax.axhline(0, color='gray', linestyle='-')
@@ -56,7 +58,9 @@ def plot_pest_attack_rate(pest_rate_df):
         data=pest_rate_df,
         x="has_alert",
         y="pest_attack_rate_pct",
+        hue="has_alert",
         palette="OrRd",
+        legend=False,
         ax=ax
     )
     ax.set_ylabel("Pest Attack Rate (%)")
@@ -69,7 +73,9 @@ def plot_aqi_by_country(aqi_summary):
         data=aqi_summary,
         x="country",
         y="air_quality_index",
+        hue="country",
         palette="viridis",
+        legend=False,
         ax=ax
     )
     ax.set_ylabel("Average Air Quality Index (AQI)")
@@ -98,7 +104,8 @@ def plot_evapotranspiration_trend(noaa_df):
     summary = noaa_df.groupby('temp_range', observed=False)['evapotranspiration_mm'].mean().reset_index()
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    sns.barplot(data=summary, x='temp_range', y='evapotranspiration_mm', palette='coolwarm', ax=ax)
+    sns.barplot(data=summary, x='temp_range', y='evapotranspiration_mm', hue='temp_range',
+                palette='coolwarm', legend=False, ax=ax)
     ax.set_xlabel("Temperature Range")
     ax.set_ylabel("Average Evaporation Rate (mm)")
     return fig
@@ -130,7 +137,8 @@ def plot_aqi_by_precipitation(noaa_df):
     summary = noaa_df.groupby('precip_range', observed=False)['air_quality_index'].mean().reset_index()
 
     fig, ax = plt.subplots(figsize=(10, 5))
-    sns.barplot(data=summary, x='precip_range', y='air_quality_index', palette='Blues', ax=ax)
+    sns.barplot(data=summary, x='precip_range', y='air_quality_index', hue='precip_range',
+                palette='Blues', legend=False, ax=ax)
     ax.set_xlabel("Amount of Rainfall")
     ax.set_ylabel("Average Air Quality Index (AQI)")
     return fig

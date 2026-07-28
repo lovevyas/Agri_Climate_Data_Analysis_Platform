@@ -6,6 +6,9 @@ An end-to-end data platform that joins Indian farm crop-yield records to officia
 IMD weather-station readings and global NOAA climate observations, then serves the
 result through a Streamlit dashboard.
 
+📘 **[Full project documentation](documentation/PROJECT_DOCUMENTATION.md)** — architecture,
+code flow, interface contracts, annotated use cases and result charts.
+
 The same pipeline runs two ways: **locally** with PySpark writing Parquet, and **on
 AWS** as a serverless pipeline provisioned entirely by Terraform.
 

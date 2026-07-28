@@ -1,0 +1,20 @@
+erDiagram
+    dim_farms ||--|| fact_crop_yield : farm_id
+    dim_weather_stations ||--o{ fact_crop_yield : matched_station_code
+    dim_weather_stations ||--|| fact_weather_observations : station_code
+
+    dim_farms {
+        varchar farm_id PK
+    }
+    dim_weather_stations {
+        varchar station_code PK
+    }
+    fact_crop_yield {
+        varchar farm_id PK
+    }
+    fact_weather_observations {
+        varchar station_code PK
+    }
+    fact_global_climate_environment {
+        bigint observation_id PK
+    }

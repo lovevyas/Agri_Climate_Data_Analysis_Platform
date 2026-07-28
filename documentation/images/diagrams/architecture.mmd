@@ -1,0 +1,12 @@
+flowchart TD
+    A[CSV uploaded to s3://bucket/raw/] --> B{S3 ObjectCreated event<br/>prefix=raw/ suffix=.csv}
+    B --> C[Lambda: trigger_glue.py]
+    C -->|glue.start_job_run| D[AWS Glue PySpark job]
+    D --> E[(S3 curated/<br/>partitioned Parquet)]
+    D --> F[(RDS PostgreSQL<br/>star schema)]
+    E --> G[Streamlit dashboard]
+    F --> G
+    H[Terraform infra/] -.provisions.-> B
+    H -.provisions.-> C
+    H -.provisions.-> D
+    H -.provisions.-> F

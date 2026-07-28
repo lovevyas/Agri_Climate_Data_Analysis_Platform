@@ -1,0 +1,1002 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>Agri-Climate Platform Documentation</title>
+<style>
+@page { size: A4; margin: 20mm 16mm; }
+* { box-sizing: border-box; }
+body {
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.5;
+    color: #1a1a1a;
+    max-width: 100%;
+}
+h1 { font-size: 20pt; border-bottom: 3px solid #2c5f2d; padding-bottom: 6px; margin-top: 0; }
+h2 { font-size: 15pt; color: #2c5f2d; border-bottom: 1px solid #ccc; padding-bottom: 4px;
+     margin-top: 26px; page-break-after: avoid; }
+h3 { font-size: 12.5pt; color: #1f3d20; margin-top: 18px; page-break-after: avoid; }
+h4 { font-size: 11pt; margin-top: 14px; page-break-after: avoid; }
+p { margin: 8px 0; }
+a { color: #2c5f2d; }
+code {
+    background: #f3f3f0; padding: 1px 4px; border-radius: 3px;
+    font-family: "Consolas", "SF Mono", monospace; font-size: 9pt;
+}
+pre {
+    background: #f6f8f6; border: 1px solid #dde3dd; border-radius: 5px;
+    padding: 10px 12px; overflow-x: auto; font-size: 8.3pt; line-height: 1.4;
+    page-break-inside: avoid;
+}
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 9.3pt;
+        page-break-inside: avoid; }
+th, td { border: 1px solid #ccc; padding: 5px 8px; text-align: left; }
+th { background: #eef4ee; }
+img { max-width: 100%; display: block; margin: 12px auto; }
+.diagram { text-align: center; margin: 14px 0; page-break-inside: avoid; }
+.diagram img { max-width: 92%; border: 1px solid #ddd; border-radius: 4px; }
+blockquote { border-left: 4px solid #2c5f2d; margin: 10px 0; padding: 4px 14px;
+             background: #f6f8f6; color: #333; }
+hr { border: none; border-top: 1px solid #ccc; margin: 20px 0; }
+.codehilite .c1, .codehilite .c { color: #6a9955; font-style: italic; }
+.codehilite .s1, .codehilite .s2, .codehilite .s { color: #a31515; }
+.codehilite .k, .codehilite .kn, .codehilite .kd { color: #0000ff; }
+.codehilite .n { color: #1a1a1a; }
+.codehilite .nb, .codehilite .bp { color: #267f99; }
+h1, h2, h3, h4 { break-inside: avoid; }
+li { margin: 3px 0; }
+</style></head><body><h1 id="agri-climate-risk-global-environmental-analytics-platform">Agri-Climate Risk &amp; Global Environmental Analytics Platform</h1>
+<h2 id="complete-project-documentation">Complete Project Documentation</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Live dashboard</strong></td>
+<td>https://agriclimate.streamlit.app/</td>
+</tr>
+<tr>
+<td><strong>Repository</strong></td>
+<td>https://github.com/lovevyas/Agri_Climate_Data_Analysis_Platform</td>
+</tr>
+<tr>
+<td><strong>Cloud</strong></td>
+<td>AWS (ap-south-1), provisioned with Terraform</td>
+</tr>
+<tr>
+<td><strong>Stack</strong></td>
+<td>PySpark on AWS Glue · Lambda · S3 · RDS PostgreSQL · Streamlit</td>
+</tr>
+</tbody>
+</table>
+<p>Every number in this document was computed from the pipeline's own output, not
+estimated. The script that produced them is described in <a href="#9-verification">§9</a>.</p>
+<hr />
+<h2 id="table-of-contents">Table of contents</h2>
+<ol>
+<li><a href="#1-what-the-project-does">What the project does</a></li>
+<li><a href="#2-prerequisites">Prerequisites</a></li>
+<li><a href="#3-architecture">Architecture</a></li>
+<li><a href="#4-code-flow">Code flow</a></li>
+<li><a href="#5-interfaces-and-contracts">Interfaces and contracts</a></li>
+<li><a href="#6-data-model">Data model</a></li>
+<li><a href="#7-use-cases-code-and-results">Use cases, code and results</a></li>
+<li><a href="#8-running-the-project">Running the project</a></li>
+<li><a href="#9-verification">Verification</a></li>
+<li><a href="#10-cost-and-teardown">Cost and teardown</a></li>
+</ol>
+<hr />
+<h2 id="1-what-the-project-does">1. What the project does</h2>
+<p>Three unrelated CSV sources are combined into one queryable star schema:</p>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Rows</th>
+<th>What it holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>agriculture_crop_analysis.csv</code></td>
+<td>2,000</td>
+<td>Farm-level crop cycles: sowing, yield, cost, revenue</td>
+</tr>
+<tr>
+<td><code>imd_weather_station_data.csv</code></td>
+<td>2,000</td>
+<td>Official India Meteorological Department station readings</td>
+</tr>
+<tr>
+<td><code>noaa_climate_environmental_data.csv</code></td>
+<td>2,000</td>
+<td>Global NOAA climate and air-quality observations</td>
+</tr>
+</tbody>
+</table>
+<p>The hard part is that farms and weather stations have <strong>no shared key</strong>. They are
+joined geographically, with a temporal fallback — see <a href="#62-farm-to-station-matching">§6.2</a>.</p>
+<p>The result is served two ways: Parquet files in S3 for analytical tools, and a
+PostgreSQL star schema for SQL queries and the dashboard.</p>
+<hr />
+<h2 id="2-prerequisites">2. Prerequisites</h2>
+<h3 id="21-to-run-locally-no-aws-account-required">2.1 To run locally (no AWS account required)</h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Version</th>
+<th>Why</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td>3.9+</td>
+<td>3.12 used in development</td>
+</tr>
+<tr>
+<td>JDK</td>
+<td>11 or 17</td>
+<td>PySpark runs on the JVM</td>
+</tr>
+<tr>
+<td>pip packages</td>
+<td>see <code>requirements.txt</code></td>
+<td>dashboard and analysis</td>
+</tr>
+<tr>
+<td>PySpark</td>
+<td>3.5.1</td>
+<td>local ETL only — not in <code>requirements.txt</code></td>
+</tr>
+</tbody>
+</table>
+<p>PySpark is deliberately excluded from <code>requirements.txt</code>: AWS Glue ships its own
+Spark runtime, and including it would add ~300 MB to the Streamlit Cloud build for
+no benefit.</p>
+<pre class="codehilite"><code class="language-bash">python -m venv .venv
+.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+pip install pyspark==3.5.1      # only if running the local pipeline
+</code></pre>
+
+<p>Verify the JVM is visible to Spark:</p>
+<pre class="codehilite"><code class="language-bash">java -version
+</code></pre>
+
+<h3 id="22-to-deploy-to-aws">2.2 To deploy to AWS</h3>
+<table>
+<thead>
+<tr>
+<th>Requirement</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AWS account</td>
+<td>Free tier covers <code>db.t3.micro</code> RDS for 12 months</td>
+</tr>
+<tr>
+<td>AWS CLI</td>
+<td>configured via <code>aws configure</code></td>
+</tr>
+<tr>
+<td>Terraform</td>
+<td>1.5+</td>
+</tr>
+<tr>
+<td>IAM permissions</td>
+<td>create S3, IAM roles, RDS, Glue, Lambda</td>
+</tr>
+</tbody>
+</table>
+<p>Confirm credentials resolve before running Terraform:</p>
+<pre class="codehilite"><code class="language-bash">aws sts get-caller-identity
+</code></pre>
+
+<h3 id="23-python-dependencies">2.3 Python dependencies</h3>
+<pre class="codehilite"><code>streamlit&gt;=1.30.0      # dashboard framework
+pandas&gt;=2.0.0          # dataframes
+numpy&gt;=1.24.0          # correlation matrix masking
+matplotlib&gt;=3.7.0      # figure rendering
+seaborn&gt;=0.12.0        # statistical charts
+sqlalchemy&gt;=2.0.0      # RDS connection for the live mode
+psycopg2-binary&gt;=2.9.0 # PostgreSQL driver
+pyarrow&gt;=14.0.0        # Parquet reader
+</code></pre>
+
+<hr />
+<h2 id="3-architecture">3. Architecture</h2>
+<div class="diagram"><img src="images/diagrams/architecture.png" alt="diagram"></div>
+
+<p><strong>Design note.</strong> Provisioning is entirely declarative (Terraform). <code>boto3</code> appears
+in exactly one place — inside the Lambda — where calling an AWS API at runtime is
+the actual requirement. Infrastructure is never created imperatively from a script.</p>
+<hr />
+<h2 id="4-code-flow">4. Code flow</h2>
+<h3 id="41-module-map">4.1 Module map</h3>
+<div class="diagram"><img src="images/diagrams/module_map.png" alt="diagram"></div>
+
+<h3 id="42-execution-order-inside-the-glue-job">4.2 Execution order inside the Glue job</h3>
+<p>The entry point reads top-to-bottom as Extract → Transform → Load:</p>
+<pre class="codehilite"><code class="language-python"># aws/glue/glue_job.py
+
+    # Extract
+    raw = {
+        name: spark.read.csv(f&quot;{raw_prefix}/{filename}&quot;, header=True, schema=schema())
+        for name, (filename, schema) in RAW_FILES.items()
+    }
+
+    # Transform
+    ag_clean = glue_transforms.clean_agriculture(raw[&quot;agriculture&quot;])
+    imd_clean = glue_transforms.clean_imd(raw[&quot;imd&quot;])
+    noaa_clean = glue_transforms.clean_noaa(raw[&quot;noaa&quot;])
+
+    dim_farms, dim_weather_stations = glue_transforms.build_dimensions(ag_clean, imd_clean)
+    matched_farms = glue_transforms.match_farms_to_stations(ag_clean, imd_clean, dim_weather_stations)
+
+    tables = {
+        &quot;dim_farms&quot;: dim_farms,
+        &quot;dim_weather_stations&quot;: dim_weather_stations,
+        &quot;fact_crop_yield&quot;: glue_transforms.build_fact_crop_yield(matched_farms),
+        &quot;fact_weather_observations&quot;: glue_transforms.build_fact_weather_observations(imd_clean),
+        &quot;fact_global_climate_environment&quot;: noaa_clean,
+    }
+
+    # Load
+    glue_load.write_curated_parquet(tables, curated_prefix)
+
+    url, props = glue_load.jdbc_settings(args)
+    glue_load.reset_tables(args)
+    glue_load.load_star_schema(tables, url, props)
+
+    summaries = glue_analytics.build_all(...)
+    glue_analytics.load_all(summaries, url, props)
+</code></pre>
+
+<h3 id="43-why-the-etl-is-split-across-five-files">4.3 Why the ETL is split across five files</h3>
+<p>Glue executes <strong>one</strong> entry-point script. Splitting it means the other four modules
+must be shipped separately, which Terraform handles by zipping them:</p>
+<pre class="codehilite"><code class="language-hcl"># infra/main.tf
+locals {
+  glue_modules = [&quot;glue_schemas.py&quot;, &quot;glue_transforms.py&quot;, &quot;glue_load.py&quot;, &quot;glue_analytics.py&quot;]
+}
+
+data &quot;archive_file&quot; &quot;glue_modules&quot; {
+  type        = &quot;zip&quot;
+  output_path = &quot;${path.module}/../aws/glue/glue_modules.zip&quot;
+
+  dynamic &quot;source&quot; {
+    for_each = local.glue_modules
+    content {
+      content  = file(&quot;${path.module}/../aws/glue/${source.value}&quot;)
+      filename = source.value
+    }
+  }
+}
+</code></pre>
+
+<pre class="codehilite"><code class="language-hcl"># infra/glue.tf — the zip is handed to Glue here
+default_arguments = {
+  &quot;--extra-py-files&quot;            = &quot;s3://${aws_s3_bucket.data_lake.id}/${aws_s3_object.glue_modules.key}&quot;
+  &quot;--additional-python-modules&quot; = &quot;psycopg2-binary&quot;
+}
+</code></pre>
+
+<blockquote>
+<p><strong>Maintenance warning.</strong> Adding a new module under <code>aws/glue/</code> requires adding its
+filename to <code>local.glue_modules</code>. Forgetting this fails at runtime with
+<code>ModuleNotFoundError</code>, not at <code>terraform apply</code>.</p>
+</blockquote>
+<hr />
+<h2 id="5-interfaces-and-contracts">5. Interfaces and contracts</h2>
+<p>This project exposes <strong>no HTTP API</strong> — it is a batch data pipeline, so there are no
+REST routes. The equivalent integration points are the four contracts below.</p>
+<h3 id="51-s3-event-lambda">5.1 S3 event → Lambda</h3>
+<p>Configured in <code>infra/lambda.tf</code>. Only <code>.csv</code> files under <code>raw/</code> fire the trigger,
+which prevents the job from re-triggering on its own Parquet output:</p>
+<pre class="codehilite"><code class="language-hcl">resource &quot;aws_s3_bucket_notification&quot; &quot;csv_upload&quot; {
+  bucket = aws_s3_bucket.data_lake.id
+
+  lambda_function {
+    lambda_function_arn = aws_lambda_function.trigger_glue.arn
+    events              = [&quot;s3:ObjectCreated:*&quot;]
+    filter_prefix       = &quot;raw/&quot;
+    filter_suffix       = &quot;.csv&quot;
+  }
+
+  depends_on = [aws_lambda_permission.allow_s3]
+}
+</code></pre>
+
+<h3 id="52-lambda-handler">5.2 Lambda handler</h3>
+<pre class="codehilite"><code class="language-python"># aws/lambda/trigger_glue.py
+def lambda_handler(event, context):
+    record = event[&quot;Records&quot;][0]
+    bucket = record[&quot;s3&quot;][&quot;bucket&quot;][&quot;name&quot;]
+    key = record[&quot;s3&quot;][&quot;object&quot;][&quot;key&quot;]
+
+    print(f&quot;S3 event: s3://{bucket}/{key}&quot;)
+
+    try:
+        response = glue.start_job_run(
+            JobName=GLUE_JOB_NAME,
+            Arguments={
+                &quot;--S3_BUCKET_NAME&quot;: S3_BUCKET_NAME,
+                &quot;--RDS_HOST&quot;: RDS_HOST,
+                &quot;--RDS_PORT&quot;: RDS_PORT,
+                &quot;--RDS_DB&quot;: RDS_DB,
+                &quot;--RDS_USER&quot;: RDS_USER,
+                &quot;--RDS_PASSWORD&quot;: RDS_PASSWORD,
+            },
+        )
+        return {&quot;statusCode&quot;: 200,
+                &quot;body&quot;: json.dumps({&quot;message&quot;: &quot;Glue job started&quot;,
+                                    &quot;job_run_id&quot;: response[&quot;JobRunId&quot;]})}
+    except Exception as e:
+        return {&quot;statusCode&quot;: 500, &quot;body&quot;: json.dumps({&quot;error&quot;: str(e)})}
+</code></pre>
+
+<p><strong>Response contract</strong></p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Body</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>200</code></td>
+<td><code>{"message", "file", "job_run_id"}</code></td>
+</tr>
+<tr>
+<td><code>500</code></td>
+<td><code>{"error"}</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="53-glue-job-arguments">5.3 Glue job arguments</h3>
+<p>Seven arguments, all required. Missing any one aborts the run with <code>GlueArgumentError</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Argument</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--JOB_NAME</code></td>
+<td>supplied by Glue</td>
+</tr>
+<tr>
+<td><code>--S3_BUCKET_NAME</code></td>
+<td>Terraform output <code>bucket_name</code></td>
+</tr>
+<tr>
+<td><code>--RDS_HOST</code></td>
+<td>Terraform output <code>db_endpoint</code> (host portion)</td>
+</tr>
+<tr>
+<td><code>--RDS_PORT</code></td>
+<td><code>5432</code></td>
+</tr>
+<tr>
+<td><code>--RDS_DB</code></td>
+<td><code>agri_climate</code></td>
+</tr>
+<tr>
+<td><code>--RDS_USER</code></td>
+<td><code>dbadmin</code></td>
+</tr>
+<tr>
+<td><code>--RDS_PASSWORD</code></td>
+<td>Terraform output <code>db_password</code> (sensitive)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="54-output-targets">5.4 Output targets</h3>
+<table>
+<thead>
+<tr>
+<th>Target</th>
+<th>Location</th>
+<th>Partitioned by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dim_farms</code></td>
+<td><code>s3://bucket/curated/dim_farms</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>dim_weather_stations</code></td>
+<td><code>s3://bucket/curated/dim_weather_stations</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>fact_crop_yield</code></td>
+<td><code>s3://bucket/curated/fact_crop_yield</code></td>
+<td><code>season</code></td>
+</tr>
+<tr>
+<td><code>fact_weather_observations</code></td>
+<td><code>s3://bucket/curated/fact_weather_observations</code></td>
+<td><code>season</code></td>
+</tr>
+<tr>
+<td><code>fact_global_climate_environment</code></td>
+<td><code>s3://bucket/curated/…</code></td>
+<td><code>country</code></td>
+</tr>
+</tbody>
+</table>
+<p>All eight tables are additionally written to RDS over JDBC.</p>
+<h3 id="55-dashboard-navigation">5.5 Dashboard navigation</h3>
+<p>The dashboard's "routes" are a sidebar radio mapped to view modules:</p>
+<pre class="codehilite"><code class="language-python"># visualizations/app.py
+PAGES = {
+    &quot;Platform Overview&quot;: overview,
+    &quot;Use Case 1: Yield &amp; Weather&quot;: usecase1_yield_weather,
+    &quot;Use Case 2: Climate Risk&quot;: usecase2_climate_risk,
+    &quot;Use Case 3: NOAA Environment&quot;: usecase3_noaa_environment,
+    &quot;Hidden Insights&quot;: hidden_insights,
+}
+
+PAGES[page].render(dfs)
+</code></pre>
+
+<blockquote>
+<p>The directory is named <code>views/</code>, not <code>pages/</code>. Streamlit treats a <code>pages/</code> folder
+beside the entry point as automatic multi-page navigation, which would have
+conflicted with this manual router.</p>
+</blockquote>
+<hr />
+<h2 id="6-data-model">6. Data model</h2>
+<h3 id="61-star-schema">6.1 Star schema</h3>
+<div class="diagram"><img src="images/diagrams/er_diagram.png" alt="diagram"></div>
+
+<table>
+<thead>
+<tr>
+<th>Table</th>
+<th>Rows</th>
+<th>Columns</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dim_farms</code></td>
+<td>2,000</td>
+<td>10</td>
+</tr>
+<tr>
+<td><code>dim_weather_stations</code></td>
+<td>2,000</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>fact_crop_yield</code></td>
+<td>2,000</td>
+<td>25</td>
+</tr>
+<tr>
+<td><code>fact_weather_observations</code></td>
+<td>2,000</td>
+<td>21</td>
+</tr>
+<tr>
+<td><code>fact_global_climate_environment</code></td>
+<td>2,000</td>
+<td>31</td>
+</tr>
+<tr>
+<td><code>analytics.yield_weather_correlation</code></td>
+<td>rollup</td>
+<td>6</td>
+</tr>
+<tr>
+<td><code>analytics.climate_risk_farms</code></td>
+<td>rollup</td>
+<td>7</td>
+</tr>
+<tr>
+<td><code>analytics.global_environment_summary</code></td>
+<td>rollup</td>
+<td>7</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62-farm-to-station-matching">6.2 Farm-to-station matching</h3>
+<p>Farms and stations share no key. Two strategies, in order:</p>
+<pre class="codehilite"><code class="language-python"># aws/glue/glue_transforms.py
+def match_farms_to_stations(ag_clean, imd_clean, dim_weather_stations):
+    keep_cols = ag_clean.columns + [&quot;matched_station_code&quot;, &quot;match_type&quot;]
+
+    exact_raw = (
+        ag_clean.join(dim_weather_stations, on=[&quot;state&quot;, &quot;district&quot;], how=&quot;inner&quot;)
+        .withColumn(&quot;matched_station_code&quot;, col(&quot;station_code&quot;))
+        .withColumn(&quot;match_type&quot;, lit(&quot;Exact District Match&quot;))
+    )
+    # A district can hold several stations, which would fan one farm out into
+    # several rows and collide with fact_crop_yield's farm_id primary key.
+    exact_matches = (
+        exact_raw
+        .withColumn(&quot;_rn&quot;, row_number().over(Window.partitionBy(&quot;farm_id&quot;).orderBy(&quot;station_code&quot;)))
+        .filter(col(&quot;_rn&quot;) == 1)
+        .select(*keep_cols)
+    )
+
+    unmatched = ag_clean.join(dim_weather_stations, on=[&quot;state&quot;, &quot;district&quot;], how=&quot;left_anti&quot;)
+
+    # Project to just the join keys: carrying all of imd_clean here would
+    # duplicate column names (season, rainfall_mm...) and make later
+    # references ambiguous.
+    station_readings = imd_clean.select(&quot;station_code&quot;, &quot;state&quot;, &quot;observation_date&quot;)
+    fallback = (
+        unmatched.join(station_readings, on=&quot;state&quot;, how=&quot;inner&quot;)
+        .withColumn(&quot;date_diff&quot;, spark_abs(datediff(col(&quot;sowing_date&quot;), col(&quot;observation_date&quot;))))
+        .withColumn(&quot;_rn&quot;, row_number().over(
+            Window.partitionBy(&quot;farm_id&quot;).orderBy(&quot;date_diff&quot;, &quot;station_code&quot;)
+        ))
+        .filter(col(&quot;_rn&quot;) == 1)
+        .withColumn(&quot;matched_station_code&quot;, col(&quot;station_code&quot;))
+        .withColumn(&quot;match_type&quot;, lit(&quot;Nearest In State&quot;))
+        .select(*keep_cols)
+    )
+
+    return exact_matches.unionByName(fallback)
+</code></pre>
+
+<p><strong>Result</strong></p>
+<table>
+<thead>
+<tr>
+<th>Match type</th>
+<th>Farms</th>
+<th>Share</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Exact District Match</td>
+<td>1,739</td>
+<td>87.0%</td>
+</tr>
+<tr>
+<td>Nearest In State</td>
+<td>261</td>
+<td>13.0%</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>2,000</strong></td>
+<td><strong>100%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>182 distinct stations are actually used out of 2,000 available.</p>
+<h3 id="63-loading-strategy">6.3 Loading strategy</h3>
+<p>Spark's <code>mode="overwrite"</code> issues <code>DROP TABLE</code>. That fails against foreign keys and
+would replace the DDL's <code>DECIMAL</code> types with Spark's inferred ones. Instead:</p>
+<pre class="codehilite"><code class="language-python"># aws/glue/glue_load.py
+RESET_SQL = &quot;&quot;&quot;
+    TRUNCATE TABLE
+        fact_crop_yield, fact_weather_observations, fact_global_climate_environment,
+        dim_farms, dim_weather_stations,
+        analytics.yield_weather_correlation, analytics.climate_risk_farms,
+        analytics.global_environment_summary
+    RESTART IDENTITY CASCADE;
+&quot;&quot;&quot;
+
+
+def load_star_schema(tables, url, props):
+    &quot;&quot;&quot;Load dimensions before facts so the foreign keys resolve.&quot;&quot;&quot;
+    print(&quot;Loading Dimension Tables to RDS...&quot;)
+    for name in (&quot;dim_farms&quot;, &quot;dim_weather_stations&quot;):
+        tables[name].write.jdbc(url=url, table=name, mode=&quot;append&quot;, properties=props)
+
+    print(&quot;Loading Fact Tables to RDS...&quot;)
+    for name in (&quot;fact_crop_yield&quot;, &quot;fact_weather_observations&quot;, &quot;fact_global_climate_environment&quot;):
+        tables[name].write.jdbc(url=url, table=name, mode=&quot;append&quot;, properties=props)
+</code></pre>
+
+<p>Postgres only permits truncating an FK-referenced table if its dependents are
+truncated in the <strong>same</strong> statement — hence one command for all eight tables.</p>
+<hr />
+<h2 id="7-use-cases-code-and-results">7. Use cases, code and results</h2>
+<h3 id="71-reading-these-results-honestly">7.1 Reading these results honestly</h3>
+<p>The source data is synthetic. Some specified charts plot variables that are
+statistically independent, and the documentation says so rather than inventing a
+narrative. Each such chart is paired with a companion chart built on a relationship
+that does hold.</p>
+<hr />
+<h3 id="use-case-1-yield-vs-official-weather">Use Case 1 — Yield vs. official weather</h3>
+<p><strong>Question.</strong> Does the weather recorded at official stations explain farm profitability?</p>
+<h4 id="chart-11-profitability-vs-station-rainfall">Chart 1.1 — Profitability vs. station rainfall</h4>
+<p><img alt="Profitability vs station rainfall" src="images/uc1_1_yield_vs_rainfall.png" /></p>
+<p>Flat cloud, no left-to-right slope, nearly all of it below break-even.
+<strong>r = +0.048</strong> — station rainfall does not separate profitable farms from unprofitable ones.</p>
+<h4 id="chart-12-rainfall-reporting-gap-by-state">Chart 1.2 — Rainfall reporting gap by state</h4>
+<p><img alt="Rainfall reporting gap" src="images/uc1_2_rainfall_gap.png" /></p>
+<p>The measurable disagreement between farmer-reported and official rainfall. This is
+the genuinely useful output of the join: it quantifies data-quality drift, which
+matters for insurance claims assessed on self-reported weather.</p>
+<h4 id="chart-13-profit-driver-explorer-interactive">Chart 1.3 — Profit driver explorer (interactive)</h4>
+<pre class="codehilite"><code class="language-python"># visualizations/views/usecase1_yield_weather.py
+PROFIT_DRIVERS = {
+    &quot;Official Station Rainfall (mm)&quot;: &quot;rainfall_mm&quot;,
+    &quot;Production Cost (INR)&quot;: &quot;production_cost_inr&quot;,
+    &quot;Land Area (acres)&quot;: &quot;land_area_acres&quot;,
+}
+
+
+def _render_profit_explorer(merged):
+    st.write(&quot;#### 3. Profit Driver Explorer (interactive)&quot;)
+
+    all_crops = sorted(merged[&quot;crop&quot;].unique())
+    col_a, col_b = st.columns([1, 1])
+    with col_a:
+        crops = st.multiselect(&quot;Crops to compare&quot;, all_crops, default=all_crops[:4])
+    with col_b:
+        driver = st.radio(&quot;Compare profit against&quot;, list(PROFIT_DRIVERS), index=0)
+
+    fig = graphs_insights.plot_profit_trend(merged, PROFIT_DRIVERS[driver], driver, crops)
+    st.pyplot(fig)
+</code></pre>
+
+<p>The chart binds x-axis to a selector so the user discovers the answer by comparison:</p>
+<table>
+<thead>
+<tr>
+<th>Selector = Rainfall</th>
+<th>Selector = Production Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img alt="" src="images/uc1_3a_explorer_rainfall.png" /></td>
+<td><img alt="" src="images/uc1_3b_explorer_cost.png" /></td>
+</tr>
+<tr>
+<td>Tangled, flat — no signal</td>
+<td>Clean monotonic decline — strong signal</td>
+</tr>
+</tbody>
+</table>
+<p>Quantile bins are used rather than equal-width so each point rests on a similar
+number of farms:</p>
+<pre class="codehilite"><code class="language-python"># visualizations/graphs_insights.py
+def plot_profit_trend(merged_df, x_col, x_label, crops):
+    &quot;&quot;&quot;Mean profit across quantile bins of x_col, one line per selected crop.&quot;&quot;&quot;
+    fig, ax = plt.subplots(figsize=(10, 5))
+
+    for crop in crops:
+        sub = merged_df[merged_df[&quot;crop&quot;] == crop]
+        if sub.empty:
+            continue
+        # Quantile bins keep each point backed by a similar number of farms,
+        # so a line never swings wildly on the strength of one outlier.
+        binned = pd.qcut(sub[x_col], q=5, duplicates=&quot;drop&quot;)
+        summary = sub.groupby(binned, observed=True)[&quot;profit_loss_inr&quot;].mean()
+        ax.plot([b.mid for b in summary.index], summary.values, marker=&quot;o&quot;, label=crop)
+
+    ax.axhline(0, color=&quot;red&quot;, linestyle=&quot;--&quot;, alpha=0.5, label=&quot;Break-even&quot;)
+    return fig
+</code></pre>
+
+<p><strong>Finding.</strong> <code>profit_loss_inr</code> equals <code>market_price_inr − production_cost_inr</code>
+<strong>exactly</strong> (max residual <code>1.16e-10</code>). Production cost correlates with profit at
+<strong>r = −0.887</strong>; station rainfall at <strong>r = +0.048</strong>. Cost runs roughly twice revenue
+throughout, which is why 95.4% of farms show a loss and the median margin is −114%.
+Profitability here is a cost-structure story, not a climate one.</p>
+<hr />
+<h3 id="use-case-2-climate-risk-and-farm-resilience">Use Case 2 — Climate risk and farm resilience</h3>
+<p><strong>Question.</strong> Do official weather alerts predict crop damage?</p>
+<h4 id="chart-21-state-crop-health">Chart 2.1 — State × crop health</h4>
+<p><img alt="Crop health heatmap" src="images/uc2_1_crop_health.png" /></p>
+<p>Scores cluster in the 60s–70s; no state-crop pairing stands out dramatically.</p>
+<h4 id="chart-22-pest-rate-under-alert-vs-no-alert-specified-chart">Chart 2.2 — Pest rate under alert vs. no alert <em>(specified chart)</em></h4>
+<p><img alt="Pest attack rate by alert" src="images/uc2_2_pest_alert.png" /></p>
+<p><strong>33.9% vs 32.2%</strong> — a 1.7-point difference. Flood and cyclone alerts do <strong>not</strong>
+predict pest attacks. Weather alerts are not a usable early-warning signal here.</p>
+<h4 id="chart-23-what-a-pest-attack-actually-costs-companion-chart">Chart 2.3 — What a pest attack actually costs <em>(companion chart)</em></h4>
+<p><img alt="Pest impact" src="images/uc2_3_pest_impact.png" /></p>
+<pre class="codehilite"><code class="language-python"># visualizations/views/usecase2_climate_risk.py
+pest_summary = (
+    yield_df.groupby(&quot;pest_attack&quot;)[[&quot;crop_health_score&quot;, &quot;yield_gap_tonnes&quot;]].mean().reset_index()
+)
+fig = graphs_insights.plot_pest_impact(pest_summary)
+st.pyplot(fig)
+</code></pre>
+
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>No pest</th>
+<th>Pest attack</th>
+<th>Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Crop health score</td>
+<td>76.66</td>
+<td>45.10</td>
+<td><strong>−31.6 points</strong></td>
+</tr>
+<tr>
+<td>Yield gap (tonnes)</td>
+<td>−1.21</td>
+<td>+10.26</td>
+<td><strong>11.5 t swing</strong></td>
+</tr>
+<tr>
+<td>Actual yield (tonnes)</td>
+<td>50.63</td>
+<td>41.05</td>
+<td><strong>−19%</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Finding.</strong> Pests are the single largest driver of lost yield (<code>crop_health_score</code>
+vs <code>yield_gap_tonnes</code>, <strong>r = −0.616</strong>) — but weather alerts give no warning of them.
+Resource pre-positioning should therefore be driven by pest surveillance, not
+meteorological alerts.</p>
+<hr />
+<h3 id="use-case-3-global-environmental-monitoring">Use Case 3 — Global environmental monitoring</h3>
+<p><strong>Question.</strong> What drives air quality and disaster risk?</p>
+<h4 id="chart-31-aqi-by-country-specified-chart">Chart 3.1 — AQI by country <em>(specified chart)</em></h4>
+<p><img alt="AQI by country" src="images/uc3_1_aqi_country.png" /></p>
+<p>Canada 106.7 · Mexico 107.0 · USA 106.2 — within one point. Country carries no
+information about air quality in this dataset.</p>
+<h4 id="chart-32-climate-zone-disaster-risk-specified-chart">Chart 3.2 — Climate zone × disaster risk <em>(specified chart)</em></h4>
+<p><img alt="Disaster risk heatmap" src="images/uc3_2_disaster_risk.png" /></p>
+<p>Every cell near 33%. Climate zone carries no information about disaster risk.</p>
+<h4 id="chart-33-environmental-correlation-matrix-companion-chart">Chart 3.3 — Environmental correlation matrix <em>(companion chart)</em></h4>
+<p><img alt="Environmental correlations" src="images/uc3_3_env_correlation.png" /></p>
+<pre class="codehilite"><code class="language-python"># visualizations/graphs_insights.py
+def plot_env_correlation_heatmap(noaa_df):
+    &quot;&quot;&quot;Correlation matrix of the NOAA environmental measures.&quot;&quot;&quot;
+    cols = [
+        &quot;avg_temperature_c&quot;, &quot;evapotranspiration_mm&quot;, &quot;precipitation_mm&quot;,
+        &quot;humidity_percent&quot;, &quot;soil_moisture_percent&quot;, &quot;air_quality_index&quot;, &quot;pm25&quot;, &quot;pm10&quot;,
+    ]
+    corr = noaa_df[cols].corr()
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.heatmap(
+        corr,
+        mask=np.triu(np.ones_like(corr, dtype=bool)),  # upper half mirrors the lower, so hide it
+        annot=True, fmt=&quot;.2f&quot;, cmap=&quot;RdBu_r&quot;, center=0, vmin=-1, vmax=1,
+        linewidths=0.5, cbar_kws={&quot;label&quot;: &quot;Correlation (r)&quot;}, ax=ax,
+    )
+    return fig
+</code></pre>
+
+<p>Same chart type as 3.2, real structure. Two clusters emerge: a thermal one
+(temperature → evapotranspiration, <strong>+0.945</strong>) and a hydrological one
+(precipitation → humidity → soil moisture, and precipitation → AQI at <strong>−0.741</strong>).</p>
+<h4 id="chart-34-drought-index-profile-companion-chart">Chart 3.4 — Drought index profile <em>(companion chart)</em></h4>
+<p><img alt="Drought profile" src="images/uc3_4_drought.png" /></p>
+<table>
+<thead>
+<tr>
+<th>Drought index</th>
+<th>Soil moisture</th>
+<th>Precipitation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Low</td>
+<td>43.93%</td>
+<td>30.54 mm</td>
+</tr>
+<tr>
+<td>Medium</td>
+<td>36.03%</td>
+<td>11.65 mm</td>
+</tr>
+<tr>
+<td>High</td>
+<td>32.29%</td>
+<td>3.26 mm</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Finding.</strong> Unlike climate zone, the drought index is a genuine summary of local
+water availability — both measures fall monotonically as severity rises.</p>
+<hr />
+<h3 id="hidden-insights">Hidden Insights</h3>
+<h4 id="evapotranspiration-vs-temperature">Evapotranspiration vs. temperature</h4>
+<p><img alt="Evapotranspiration" src="images/hi_1_evapotranspiration.png" /></p>
+<p>0.8 mm below 0 °C rising to 6.0 mm above 30 °C — roughly sevenfold (<strong>r = +0.945</strong>).
+A direct visual for water stress: higher temperatures mean faster soil drying.</p>
+<h4 id="actual-vs-expected-yield">Actual vs. expected yield</h4>
+<p><img alt="Yield gap" src="images/hi_2_yield_gap.png" /></p>
+<p><strong>r = +0.972.</strong> Farms forecast well; points below the red line are the shortfalls,
+averaging about 5% of expected yield.</p>
+<h4 id="aqi-vs-precipitation">AQI vs. precipitation</h4>
+<p><img alt="AQI vs precipitation" src="images/hi_3_aqi_precip.png" /></p>
+<p><strong>r = −0.741.</strong> Rain scrubs particulates from the air. This is the effect the flat
+AQI-by-country chart was missing.</p>
+<hr />
+<h2 id="8-running-the-project">8. Running the project</h2>
+<h3 id="81-locally">8.1 Locally</h3>
+<pre class="codehilite"><code class="language-bash">python pyspark/run_pipeline.py     # raw CSVs -&gt; datasets/curated/ Parquet
+python testing/verify_tests.py     # writes testing/test_results_log.csv
+streamlit run visualizations/app.py
+</code></pre>
+
+<h3 id="82-deploying-to-aws">8.2 Deploying to AWS</h3>
+<pre class="codehilite"><code class="language-bash">cd infra
+terraform init
+terraform apply
+</code></pre>
+
+<p>Create the tables once (reads <code>DB_HOST</code> and <code>DB_PASSWORD</code> from the environment):</p>
+<pre class="codehilite"><code class="language-bash">python apply_schema.py
+</code></pre>
+
+<p>From here the pipeline is event-driven:</p>
+<pre class="codehilite"><code class="language-bash">aws s3 cp ../datasets/raw/agriculture_crop_analysis.csv s3://&lt;bucket&gt;/raw/
+</code></pre>
+
+<p>To start a run directly instead:</p>
+<pre class="codehilite"><code class="language-powershell">.\test_glue_args.ps1
+</code></pre>
+
+<blockquote>
+<p><strong>PowerShell note.</strong> <code>ConvertTo-Json | Set-Content -Encoding utf8</code> writes a UTF-8
+BOM in PowerShell 5.1, which the AWS CLI rejects when reading <code>file://</code>. The helper
+script uses <code>[System.IO.File]::WriteAllText</code> with <code>UTF8Encoding($false)</code> instead.</p>
+</blockquote>
+<h3 id="83-deployed-dashboard">8.3 Deployed dashboard</h3>
+<p>Hosted on Streamlit Community Cloud from <code>visualizations/app.py</code>, reading the
+committed Parquet files. The live-RDS option is intentionally unused there —
+connecting would require typing a database password into a public page.</p>
+<hr />
+<h2 id="9-verification">9. Verification</h2>
+<p>The pipeline was validated at four levels:</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>Check</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Schema</td>
+<td>Fact column lists vs <code>create_tables.sql</code></td>
+<td>25 and 21 columns, exact match</td>
+</tr>
+<tr>
+<td>Referential</td>
+<td><code>matched_station_code</code> values absent from <code>dim_weather_stations</code></td>
+<td><strong>0 orphans</strong></td>
+</tr>
+<tr>
+<td>Key integrity</td>
+<td>Duplicate PKs in each fact table</td>
+<td>none</td>
+</tr>
+<tr>
+<td>Runtime</td>
+<td>Glue job end-to-end on AWS</td>
+<td>succeeded</td>
+</tr>
+<tr>
+<td>Dashboard</td>
+<td>All 5 pages, 13 charts</td>
+<td>0 exceptions</td>
+</tr>
+<tr>
+<td>Dependencies</td>
+<td>Every import present in <code>requirements.txt</code></td>
+<td>all covered</td>
+</tr>
+</tbody>
+</table>
+<h3 id="91-bugs-found-and-fixed-during-development">9.1 Bugs found and fixed during development</h3>
+<table>
+<thead>
+<tr>
+<th>Symptom</th>
+<th>Root cause</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Reference 'season' is ambiguous</code></td>
+<td>Fallback join carried all of <code>imd_clean</code>, duplicating column names</td>
+<td>Project to the three join keys only</td>
+</tr>
+<tr>
+<td><code>cannot drop table dim_farms</code></td>
+<td>Spark <code>mode="overwrite"</code> issues <code>DROP TABLE</code>, blocked by FKs</td>
+<td><code>TRUNCATE … CASCADE</code> + <code>mode="append"</code></td>
+</tr>
+<tr>
+<td><code>Column "state" not found</code></td>
+<td>Facts carried dimension columns; <code>append</code> validates against the real table</td>
+<td>Explicit <code>.select()</code> to the DDL columns</td>
+</tr>
+<tr>
+<td><code>duplicate key … fact_crop_yield_pkey</code></td>
+<td>A district holds several stations, fanning one farm into several rows</td>
+<td>Window dedup to one station per farm</td>
+</tr>
+<tr>
+<td>Overview showed 2,000 "stations matched"</td>
+<td>Metric counted the dimension, not actual matches</td>
+<td>Count <code>matched_station_code</code> distinct → 182</td>
+</tr>
+<tr>
+<td>5 charts would break on seaborn 0.14</td>
+<td><code>palette=</code> without <code>hue=</code> is deprecated</td>
+<td>Added <code>hue=</code> + <code>legend=False</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <code>mode="overwrite"</code> bug is worth dwelling on: it was silently <em>masking</em> the
+schema error. Overwrite recreated each table to match whatever the DataFrame held,
+so the extra dimension columns never raised anything — they just quietly corrupted
+the star schema. Switching to <code>append</code> made Spark validate against the real table
+and surface the mismatch.</p>
+<hr />
+<h2 id="10-cost-and-teardown">10. Cost and teardown</h2>
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>Billing</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RDS <code>db.t3.micro</code></td>
+<td><strong>hourly</strong></td>
+<td>free tier 12 months; the only continuous cost</td>
+</tr>
+<tr>
+<td>S3</td>
+<td>per GB</td>
+<td>~2 MB stored — negligible</td>
+</tr>
+<tr>
+<td>Glue</td>
+<td>per DPU-hour</td>
+<td>2 × G.1X, a few minutes per run</td>
+</tr>
+<tr>
+<td>Lambda</td>
+<td>per invocation</td>
+<td>free tier covers it</td>
+</tr>
+</tbody>
+</table>
+<p>RDS is the only meaningful cost. When finished:</p>
+<pre class="codehilite"><code class="language-bash">cd infra
+terraform destroy
+</code></pre>
+
+<h3 id="security-note">Security note</h3>
+<p>The RDS instance is deliberately <code>publicly_accessible = true</code> with ingress from
+<code>0.0.0.0/0</code>, so the dashboard can reach it from a laptop without a bastion host or
+VPN. It is protected only by a generated 20-character password.</p>
+<p><strong>This is a demo convenience, not a pattern to copy.</strong> Production would place RDS in
+a private subnet and reach it through a bastion, a VPN, or a VPC-attached Lambda.
+The Terraform state holding that password is excluded from version control.</p></body></html>

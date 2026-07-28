@@ -1,0 +1,13 @@
+flowchart LR
+    subgraph Glue["aws/glue/ - runs on AWS Glue"]
+        J[glue_job.py<br/>entry point] --> S[glue_schemas.py]
+        J --> T[glue_transforms.py]
+        J --> L[glue_load.py]
+        J --> A[glue_analytics.py]
+    end
+    subgraph Dash["visualizations/ - Streamlit"]
+        AP[app.py<br/>router] --> DL[data_loader.py]
+        AP --> V[views/*.py]
+        V --> G[graphs.py]
+        V --> GI[graphs_insights.py]
+    end
